@@ -16,6 +16,12 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+dependencies = [
+    "opencv-python >= 4.9.0",
+    "pytransform3d[all]",
+    "matplotlib >= 3.9", # solve `A module that was compiled using NumPy 1.x cannot be run in` Error
+    "scipy >= 1.14", # solve `A module that was compiled using NumPy 1.x cannot be run in` Error
+]
 
 [project.urls]
 Homepage = "https://github.com/hilookas/astra_teleop"
