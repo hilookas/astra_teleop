@@ -9,6 +9,7 @@ from pytransform3d import rotations as pr
 import math
 from .cam import open_cam
 import argparse
+from pprint import pprint
 
 def calibration_load(calibration_directory="./calibration_images"):
     file_names = glob.glob(str(Path(calibration_directory) / 'calibration_results_*.yaml'))
@@ -39,7 +40,8 @@ def rvec_tvec_from_transform(transform):
 
 def process(
     device="/dev/video0", calibration_directory="./calibration_images", 
-    left_handle_cb=None, right_handle_cb=None
+    left_handle_cb=None, right_handle_cb=None,
+    debug=False
 ):
     # Open camera
     cam = open_cam(device)
@@ -81,17 +83,18 @@ def process(
 
     while True:
         ret, rgb_image = cam.read()
-        debug_image = rgb_image.copy()
 
         aruco_corners, aruco_ids, aruco_rejected_image_points = detector.detectMarkers(rgb_image)
 
-        # draw results
-        cv2.aruco.drawDetectedMarkers(debug_image, aruco_corners, aruco_ids)
+        if debug:
+            # draw results
+            debug_image = rgb_image.copy()
+            cv2.aruco.drawDetectedMarkers(debug_image, aruco_corners, aruco_ids)
 
-        # # Rejected
-        # cv2.aruco.drawDetectedMarkers(debug_image, aruco_rejected_image_points, None, (100, 0, 255))
+            # # Rejected
+            # cv2.aruco.drawDetectedMarkers(debug_image, aruco_rejected_image_points, None, (100, 0, 255))
 
-        # tag_transforms = []
+            # tag_transforms = []
 
         max_area = 0
         tag2cam_in_use = None
@@ -103,6 +106,7 @@ def process(
             for aruco_corner, aruco_id in zip(aruco_corners, aruco_ids):
                 aruco_id = aruco_id.item()
                 is_left_hand = aruco_id in left_hand_markers
+
                 # rvec shape (3, 1)
                 # tvec shape (3, 1)
                 unknown_variable, rvec, tvec = cv2.solvePnP(
@@ -111,12 +115,13 @@ def process(
                     camera_matrix, distortion_coefficients
                 )
                 
-                # cv2.drawFrameAxes(
-                #     debug_image,
-                #     camera_matrix, distortion_coefficients,
-                #     rvec, tvec,
-                #     marker_length_mm * 1, 2
-                # )
+                # if debug:
+                #     cv2.drawFrameAxes(
+                #         debug_image,
+                #         camera_matrix, distortion_coefficients,
+                #         rvec, tvec,
+                #         marker_length_mm * 1, 2
+                #     )
 
                 # Coordinate setting: 
                 # https://stackoverflow.com/questions/53277597/fundamental-understanding-of-tvecs-rvecs-in-opencv-aruco
@@ -144,40 +149,49 @@ def process(
                         tag2cam_in_use = tag2cam
             
             if tag2cam_in_use is not None:
-                rvec2, tvec2 = rvec_tvec_from_transform(tag2cam_in_use)
-                cv2.drawFrameAxes(
-                    debug_image,
-                    camera_matrix, distortion_coefficients,
-                    rvec2, tvec2,
-                    marker_length_mm * 1, 2
-                )
+                if right_handle_cb is not None:
+                    right_handle_cb(tag2cam_in_use)
+
+                if debug:
+                    rvec2, tvec2 = rvec_tvec_from_transform(tag2cam_in_use)
+                    cv2.drawFrameAxes(
+                        debug_image,
+                        camera_matrix, distortion_coefficients,
+                        rvec2, tvec2,
+                        marker_length_mm * 1, 2
+                    )
 
             if left_tag2cam_in_use is not None:
-                rvec2, tvec2 = rvec_tvec_from_transform(left_tag2cam_in_use)
-                cv2.drawFrameAxes(
-                    debug_image,
-                    camera_matrix, distortion_coefficients,
-                    rvec2, tvec2,
-                    marker_length_mm * 1, 2
-                )
+                if left_handle_cb is not None:
+                    left_handle_cb(left_tag2cam_in_use)
 
-        # # visualize via matplotlib
-        # import matplotlib.pyplot as plt
-        # from pytransform3d.plot_utils import make_3d_axis
-        # plt.ion()
-        # plt.cla()
-        # ax = make_3d_axis(ax_s=1, unit="m", n_ticks=6)
-        # pt.plot_transform(ax=ax)
-        # for tag2cam in transforms:
-        #     pprint(tag2cam)
-        #     pt.plot_transform(ax, A2B=tag2cam)
-        # # plt.show()
-        # plt.draw()
-        # plt.pause(0.001)
+                if debug:
+                    rvec2, tvec2 = rvec_tvec_from_transform(left_tag2cam_in_use)
+                    cv2.drawFrameAxes(
+                        debug_image,
+                        camera_matrix, distortion_coefficients,
+                        rvec2, tvec2,
+                        marker_length_mm * 1, 2
+                    )
 
-        cv2.imshow('Debug Image', debug_image)
-        if (cv2.waitKey(1) == 27): # Must wait, otherwise imshow will show black screen
-            break
+        if debug:
+            # # visualize via matplotlib
+            # import matplotlib.pyplot as plt
+            # from pytransform3d.plot_utils import make_3d_axis
+            # plt.ion()
+            # plt.cla()
+            # ax = make_3d_axis(ax_s=1, unit="m", n_ticks=6)
+            # pt.plot_transform(ax=ax)
+            # for tag2cam in transforms:
+            #     pprint(tag2cam)
+            #     pt.plot_transform(ax, A2B=tag2cam)
+            # # plt.show()
+            # plt.draw()
+            # plt.pause(0.001)
+
+            cv2.imshow('Debug Image', debug_image)
+            if (cv2.waitKey(1) == 27): # Must wait, otherwise imshow will show black screen
+                break
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -185,4 +199,4 @@ if __name__ == '__main__':
     parser.add_argument("-c", "--calibration_directory", help="Calibration directory.", default="./calibration_images")
     args = parser.parse_args()
 
-    process(args.device, args.calibration_directory)
+    process(args.device, args.calibration_directory, pprint, pprint, debug=True)
