@@ -5,12 +5,11 @@ from pathlib import Path
 from .cam import open_cam
 import argparse
 
-def calibration_collect(device="/dev/video0", calibration_directory="./calibration_images"):
+def calibration_collect(device="/dev/video0", calibration_directory="./calibration_images", num_images_to_collect=60):
     cam = open_cam(device)
 
     Path(calibration_directory).mkdir(parents=True, exist_ok=True)
 
-    num_images_to_collect = 60
     time_between_images_sec = 0.5
 
     prev_save_time = time.time()
@@ -35,6 +34,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--device", help="Device name.", default="/dev/video0")
     parser.add_argument("-c", "--calibration_directory", help="Calibration directory.", default="./calibration_images")
+    parser.add_argument("-n", "--num_images_to_collect", help="num_images_to_collect", default=60, type=int)
     args = parser.parse_args()
 
     calibration_collect(args.device, args.calibration_directory)

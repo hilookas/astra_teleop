@@ -14,13 +14,11 @@ from pprint import pprint
 def calibration_load(calibration_directory="./calibration_images"):
     file_names = glob.glob(str(Path(calibration_directory) / 'calibration_results_*.yaml'))
     file_names.sort()
-    if len(file_names) > 0:
-        file_name = file_names[-1]
-        with open(file_name) as f:
-            camera_calibration = yaml.load(f, Loader=SafeLoader)
-    else:
-        print('Webcam: No camera calibration files found.')
+    assert len(file_names) > 0, 'Webcam: No camera calibration files found.'
 
+    file_name = file_names[-1]
+    with open(file_name) as f:
+        camera_calibration = yaml.load(f, Loader=SafeLoader)
     assert camera_calibration, 'Webcam: Failed to successfully load camera calibration results.'
 
     print('Webcam: Loaded camera calibration results from file =', file_name)
@@ -28,6 +26,7 @@ def calibration_load(calibration_directory="./calibration_images"):
     return np.array(camera_calibration['camera_matrix']), np.array(camera_calibration['distortion_coefficients'])
 
 def transform_from_rvec_tvec(rvec, tvec):
+    # cv2.Rodrigues(rvec.squeeze())[0] == pr.matrix_from_compact_axis_angle(rvec.squeeze())
     return pt.transform_from(
         pr.matrix_from_compact_axis_angle(rvec), 
         tvec
@@ -57,7 +56,16 @@ def process(
     detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_detection_parameters)
 
     # set coordinate system
+    # Coordinate setting: 
+    # https://stackoverflow.com/questions/53277597/fundamental-understanding-of-tvecs-rvecs-in-opencv-aruco
     marker_length_mm = 0.056
+    obj_points = np.array([
+        (-marker_length_mm / 2, marker_length_mm / 2, 0), # top left
+        (marker_length_mm / 2, marker_length_mm / 2, 0), # top right
+        (marker_length_mm / 2, -marker_length_mm / 2, 0), # bottom right
+        (-marker_length_mm / 2, -marker_length_mm / 2, 0), # bottom left
+    ])
+
     marker_z_to_center = -0.075/2
     marker_rotation_matrix = {
         # right gripper
@@ -74,12 +82,6 @@ def process(
         231: pr.matrix_from_euler([math.pi/2, math.pi/2, 0], 2, 1, 0, False), # original: right_top, now: back
     }
     left_hand_markers = [ 233, 235, 236, 237, 231 ]
-    obj_points = np.array([
-        (-marker_length_mm / 2, marker_length_mm / 2, 0), # top left
-        (marker_length_mm / 2, marker_length_mm / 2, 0), # top right
-        (marker_length_mm / 2, -marker_length_mm / 2, 0), # bottom right
-        (-marker_length_mm / 2, -marker_length_mm / 2, 0), # bottom left
-    ])
 
     while True:
         ret, rgb_image = cam.read()
@@ -96,8 +98,8 @@ def process(
 
             # tag_transforms = []
 
-        max_area = 0
-        tag2cam_in_use = None
+        right_max_area = 0
+        right_tag2cam_in_use = None
         left_max_area = 0
         left_tag2cam_in_use = None
 
@@ -109,25 +111,56 @@ def process(
 
                 # rvec shape (3, 1)
                 # tvec shape (3, 1)
-                unknown_variable, rvec, tvec = cv2.solvePnP(
+                # unknown_variable, rvec, tvec = cv2.solvePnP(
+                #     obj_points, # shape: (4, 3) # point coord in 3d space
+                #     aruco_corner, # shape: (1, 4, 2) # point coord in camera 2d space
+                #     camera_matrix, distortion_coefficients
+                # )
+                
+                # There is a projection ambiguity problem
+                # See https://github.com/opencv/opencv/issues/8813 for more detail
+                num, (rvec1, rvec2), (tvec1, tvec2), reprojection_errors = cv2.solvePnPGeneric(
                     obj_points, # shape: (4, 3) # point coord in 3d space
                     aruco_corner, # shape: (1, 4, 2) # point coord in camera 2d space
-                    camera_matrix, distortion_coefficients
+                    camera_matrix, distortion_coefficients,
+                    flags=cv2.SOLVEPNP_IPPE_SQUARE
                 )
-                
+
                 # if debug:
                 #     cv2.drawFrameAxes(
                 #         debug_image,
                 #         camera_matrix, distortion_coefficients,
-                #         rvec, tvec,
+                #         rvec1, tvec1,
+                #         marker_length_mm * 1, 2
+                #     )
+                #     cv2.drawFrameAxes(
+                #         debug_image,
+                #         camera_matrix, distortion_coefficients,
+                #         rvec2, tvec2,
                 #         marker_length_mm * 1, 2
                 #     )
 
-                # Coordinate setting: 
-                # https://stackoverflow.com/questions/53277597/fundamental-understanding-of-tvecs-rvecs-in-opencv-aruco
-                # / 1000 : Convert ArUco position estimate to be in meters
-                # cv2.Rodrigues(rvec.squeeze())[0] == pr.matrix_from_compact_axis_angle(rvec.squeeze())
-                tag2cam = transform_from_rvec_tvec(rvec.squeeze(), tvec.squeeze())
+                tag2cam1 = transform_from_rvec_tvec(rvec1.squeeze(), tvec1.squeeze())
+                tag2cam2 = transform_from_rvec_tvec(rvec2.squeeze(), tvec2.squeeze())
+
+                reprojection_errors = reprojection_errors.squeeze()
+                err_diff = reprojection_errors[1] - reprojection_errors[0]
+                if err_diff < 0.1:
+                    err_coff = [0.5, 0.5]
+                elif err_diff < 0.3:
+                    membership = (err_diff - 0.1) / (0.3 - 0.1)
+                    err_coff = [0.5 + membership * 0.5, 0.5 - membership * 0.5]
+                else:
+                    err_coff = [1, 0]
+                if debug:
+                    print(err_diff)
+                    print(err_coff)
+
+                tag2cam = pt.transform_from_dual_quaternion(
+                    pt.dual_quaternion_from_transform(tag2cam1) * err_coff[0] 
+                    + pt.dual_quaternion_from_transform(tag2cam2) * err_coff[1]
+                )
+                
                 # tag_transforms.append((aruco_id, tag2cam))
 
                 # move to center
@@ -144,20 +177,22 @@ def process(
                         left_max_area = area
                         left_tag2cam_in_use = tag2cam
                 else:
-                    if area > max_area:
-                        max_area = area
-                        tag2cam_in_use = tag2cam
+                    if area > right_max_area:
+                        right_max_area = area
+                        # right_tag2cam_in_use = (tag2cam, tag2cam1, tag2cam2)
+                        right_tag2cam_in_use = tag2cam
             
-            if tag2cam_in_use is not None:
+            if right_tag2cam_in_use is not None:
                 if right_handle_cb is not None:
-                    right_handle_cb(tag2cam_in_use)
+                    # right_handle_cb(*right_tag2cam_in_use)
+                    right_handle_cb(right_tag2cam_in_use)
 
                 if debug:
-                    rvec2, tvec2 = rvec_tvec_from_transform(tag2cam_in_use)
+                    rvec, tvec = rvec_tvec_from_transform(right_tag2cam_in_use)
                     cv2.drawFrameAxes(
                         debug_image,
                         camera_matrix, distortion_coefficients,
-                        rvec2, tvec2,
+                        rvec, tvec,
                         marker_length_mm * 1, 2
                     )
 
@@ -166,11 +201,11 @@ def process(
                     left_handle_cb(left_tag2cam_in_use)
 
                 if debug:
-                    rvec2, tvec2 = rvec_tvec_from_transform(left_tag2cam_in_use)
+                    rvec, tvec = rvec_tvec_from_transform(left_tag2cam_in_use)
                     cv2.drawFrameAxes(
                         debug_image,
                         camera_matrix, distortion_coefficients,
-                        rvec2, tvec2,
+                        rvec, tvec,
                         marker_length_mm * 1, 2
                     )
 
@@ -190,6 +225,8 @@ def process(
             # plt.pause(0.001)
 
             cv2.imshow('Debug Image', debug_image)
+            # debug_image2 = cv2.undistort(debug_image, camera_matrix, distortion_coefficients)
+            # cv2.imshow('Debug Image 2', debug_image2)
             if (cv2.waitKey(1) == 27): # Must wait, otherwise imshow will show black screen
                 break
 

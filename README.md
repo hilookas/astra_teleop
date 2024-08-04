@@ -17,4 +17,12 @@ python -m astra_teleop.calibration_process -c ./calibration_images
 python -m astra_teleop.process -d /dev/video0 -c ./calibration_images
 ```
 
-TODO License
+## Acknowledgment
+
+Special thanks to Hello Robot team and their stretch dex teleop project!
+
+<https://github.com/hello-robot/stretch_dex_teleop>
+
+## License
+
+TODO 
