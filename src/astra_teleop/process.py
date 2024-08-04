@@ -40,7 +40,10 @@ def rvec_tvec_from_transform(transform):
 def process(
     device="/dev/video0", calibration_directory="./calibration_images", 
     left_handle_cb=None, right_handle_cb=None,
-    debug=False
+    debug=False,
+    mitigate_projection_ambiguity=True,
+    err_diff_thres_start=0.05,
+    err_diff_thres_end=0.3,
 ):
     # Open camera
     cam = open_cam(device)
@@ -108,58 +111,61 @@ def process(
             for aruco_corner, aruco_id in zip(aruco_corners, aruco_ids):
                 aruco_id = aruco_id.item()
                 is_left_hand = aruco_id in left_hand_markers
-
-                # rvec shape (3, 1)
-                # tvec shape (3, 1)
-                # unknown_variable, rvec, tvec = cv2.solvePnP(
-                #     obj_points, # shape: (4, 3) # point coord in 3d space
-                #     aruco_corner, # shape: (1, 4, 2) # point coord in camera 2d space
-                #     camera_matrix, distortion_coefficients
-                # )
                 
-                # There is a projection ambiguity problem
-                # See https://github.com/opencv/opencv/issues/8813 for more detail
-                num, (rvec1, rvec2), (tvec1, tvec2), reprojection_errors = cv2.solvePnPGeneric(
-                    obj_points, # shape: (4, 3) # point coord in 3d space
-                    aruco_corner, # shape: (1, 4, 2) # point coord in camera 2d space
-                    camera_matrix, distortion_coefficients,
-                    flags=cv2.SOLVEPNP_IPPE_SQUARE
-                )
+                if mitigate_projection_ambiguity:
+                    # There is a projection ambiguity problem
+                    # See https://github.com/opencv/opencv/issues/8813 for more detail
+                    num, (rvec1, rvec2), (tvec1, tvec2), reprojection_errors = cv2.solvePnPGeneric(
+                        obj_points,
+                        aruco_corner,
+                        camera_matrix, distortion_coefficients,
+                        flags=cv2.SOLVEPNP_IPPE_SQUARE
+                    )
 
-                # if debug:
-                #     cv2.drawFrameAxes(
-                #         debug_image,
-                #         camera_matrix, distortion_coefficients,
-                #         rvec1, tvec1,
-                #         marker_length_mm * 1, 2
-                #     )
-                #     cv2.drawFrameAxes(
-                #         debug_image,
-                #         camera_matrix, distortion_coefficients,
-                #         rvec2, tvec2,
-                #         marker_length_mm * 1, 2
-                #     )
+                    if debug:
+                        cv2.drawFrameAxes(
+                            debug_image,
+                            camera_matrix, distortion_coefficients,
+                            rvec1, tvec1,
+                            marker_length_mm * 1, 2
+                        )
+                        cv2.drawFrameAxes(
+                            debug_image,
+                            camera_matrix, distortion_coefficients,
+                            rvec2, tvec2,
+                            marker_length_mm * 1, 2
+                        )
 
-                tag2cam1 = transform_from_rvec_tvec(rvec1.squeeze(), tvec1.squeeze())
-                tag2cam2 = transform_from_rvec_tvec(rvec2.squeeze(), tvec2.squeeze())
+                    tag2cam1 = transform_from_rvec_tvec(rvec1.squeeze(), tvec1.squeeze())
+                    tag2cam2 = transform_from_rvec_tvec(rvec2.squeeze(), tvec2.squeeze())
 
-                reprojection_errors = reprojection_errors.squeeze()
-                err_diff = reprojection_errors[1] - reprojection_errors[0]
-                if err_diff < 0.1:
-                    err_coff = [0.5, 0.5]
-                elif err_diff < 0.3:
-                    membership = (err_diff - 0.1) / (0.3 - 0.1)
-                    err_coff = [0.5 + membership * 0.5, 0.5 - membership * 0.5]
+                    reprojection_errors = reprojection_errors.squeeze()
+                    err_diff = reprojection_errors[1] - reprojection_errors[0]
+                    if err_diff < err_diff_thres_start:
+                        err_coff = [0.5, 0.5]
+                    elif err_diff < err_diff_thres_end:
+                        membership = (err_diff - err_diff_thres_start) / (err_diff_thres_end - err_diff_thres_start)
+                        err_coff = [0.5 + membership * 0.5, 0.5 - membership * 0.5]
+                    else:
+                        err_coff = [1, 0]
+                    if debug:
+                        print(err_diff)
+                        print(err_coff)
+
+                    tag2cam = pt.transform_from_dual_quaternion(
+                        pt.dual_quaternion_from_transform(tag2cam1) * err_coff[0] 
+                        + pt.dual_quaternion_from_transform(tag2cam2) * err_coff[1]
+                    )
                 else:
-                    err_coff = [1, 0]
-                if debug:
-                    print(err_diff)
-                    print(err_coff)
-
-                tag2cam = pt.transform_from_dual_quaternion(
-                    pt.dual_quaternion_from_transform(tag2cam1) * err_coff[0] 
-                    + pt.dual_quaternion_from_transform(tag2cam2) * err_coff[1]
-                )
+                    # rvec shape (3, 1)
+                    # tvec shape (3, 1)
+                    unknown_variable, rvec, tvec = cv2.solvePnP(
+                        obj_points, # shape: (4, 3) # point coord in 3d space
+                        aruco_corner, # shape: (1, 4, 2) # point coord in camera 2d space
+                        camera_matrix, distortion_coefficients
+                    )
+                    
+                    tag2cam = transform_from_rvec_tvec(rvec.squeeze(), tvec.squeeze())
                 
                 # tag_transforms.append((aruco_id, tag2cam))
 
@@ -225,8 +231,8 @@ def process(
             # plt.pause(0.001)
 
             cv2.imshow('Debug Image', debug_image)
-            # debug_image2 = cv2.undistort(debug_image, camera_matrix, distortion_coefficients)
-            # cv2.imshow('Debug Image 2', debug_image2)
+            debug_image2 = cv2.undistort(debug_image, camera_matrix, distortion_coefficients)
+            cv2.imshow('Debug Image 2', debug_image2)
             if (cv2.waitKey(1) == 27): # Must wait, otherwise imshow will show black screen
                 break
 
