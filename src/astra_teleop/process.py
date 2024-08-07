@@ -42,7 +42,7 @@ def process(
     left_handle_cb=None, right_handle_cb=None,
     debug=False,
     mitigate_projection_ambiguity=True,
-    err_diff_thres_start=0.05,
+    err_diff_thres_start=0.1,
     err_diff_thres_end=0.3,
 ):
     # Open camera
@@ -122,19 +122,19 @@ def process(
                         flags=cv2.SOLVEPNP_IPPE_SQUARE
                     )
 
-                    if debug:
-                        cv2.drawFrameAxes(
-                            debug_image,
-                            camera_matrix, distortion_coefficients,
-                            rvec1, tvec1,
-                            marker_length_mm * 1, 2
-                        )
-                        cv2.drawFrameAxes(
-                            debug_image,
-                            camera_matrix, distortion_coefficients,
-                            rvec2, tvec2,
-                            marker_length_mm * 1, 2
-                        )
+                    # if debug:
+                    #     cv2.drawFrameAxes(
+                    #         debug_image,
+                    #         camera_matrix, distortion_coefficients,
+                    #         rvec1, tvec1,
+                    #         marker_length_mm * 1, 2
+                    #     )
+                    #     cv2.drawFrameAxes(
+                    #         debug_image,
+                    #         camera_matrix, distortion_coefficients,
+                    #         rvec2, tvec2,
+                    #         marker_length_mm * 1, 2
+                    #     )
 
                     tag2cam1 = transform_from_rvec_tvec(rvec1.squeeze(), tvec1.squeeze())
                     tag2cam2 = transform_from_rvec_tvec(rvec2.squeeze(), tvec2.squeeze())
@@ -152,10 +152,11 @@ def process(
                         print(err_diff)
                         print(err_coff)
 
-                    tag2cam = pt.transform_from_dual_quaternion(
-                        pt.dual_quaternion_from_transform(tag2cam1) * err_coff[0] 
-                        + pt.dual_quaternion_from_transform(tag2cam2) * err_coff[1]
-                    )
+                    tag2cam = pt.transform_from_pq(pt.pq_slerp(
+                        pt.pq_from_transform(tag2cam1),
+                        pt.pq_from_transform(tag2cam2),
+                        err_coff[1]
+                    ))
                 else:
                     # rvec shape (3, 1)
                     # tvec shape (3, 1)
@@ -231,8 +232,8 @@ def process(
             # plt.pause(0.001)
 
             cv2.imshow('Debug Image', debug_image)
-            debug_image2 = cv2.undistort(debug_image, camera_matrix, distortion_coefficients)
-            cv2.imshow('Debug Image 2', debug_image2)
+            # debug_image2 = cv2.undistort(debug_image, camera_matrix, distortion_coefficients)
+            # cv2.imshow('Debug Image 2', debug_image2)
             if (cv2.waitKey(1) == 27): # Must wait, otherwise imshow will show black screen
                 break
 
