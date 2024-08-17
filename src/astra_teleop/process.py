@@ -37,27 +37,33 @@ def rvec_tvec_from_transform(transform):
     tvec = transform[:3,3]
     return rvec, tvec
 
-def process(
-    device="/dev/video0", calibration_directory="./calibration_images", 
-    left_handle_cb=None, right_handle_cb=None,
-    debug=False,
-    mitigate_projection_ambiguity=True,
-    err_diff_thres_start=0.1,
-    err_diff_thres_end=0.3,
-):
-    # Open camera
-    cam = open_cam(device)
-
-    # Load calibration
-    camera_matrix, distortion_coefficients = calibration_load(calibration_directory)
-
+def get_detect():
     aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
     aruco_detection_parameters = cv2.aruco.DetectorParameters()
     # aruco_detection_parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
     aruco_detection_parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_APRILTAG
     # aruco_detection_parameters.cornerRefinementWinSize = 2
     detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_detection_parameters)
+    
+    def detect(
+        rgb_image,
+        debug,
+        debug_image
+    ):
+        aruco_corners, aruco_ids, aruco_rejected_image_points = detector.detectMarkers(rgb_image)
 
+        if debug:
+            cv2.aruco.drawDetectedMarkers(debug_image, aruco_corners, aruco_ids)
+
+            # # Rejected
+            # cv2.aruco.drawDetectedMarkers(debug_image, aruco_rejected_image_points, None, (100, 0, 255))
+
+            # tag_transforms = []
+            
+        return aruco_corners, aruco_ids
+    return detect
+
+def get_solve():
     # set coordinate system
     # Coordinate setting: 
     # https://stackoverflow.com/questions/53277597/fundamental-understanding-of-tvecs-rvecs-in-opencv-aruco
@@ -85,21 +91,21 @@ def process(
         231: pr.matrix_from_euler([math.pi/2, math.pi/2, 0], 2, 1, 0, False), # original: right_top, now: back
     }
     left_hand_markers = [ 233, 235, 236, 237, 231 ]
-
-    while True:
-        ret, rgb_image = cam.read()
-
-        aruco_corners, aruco_ids, aruco_rejected_image_points = detector.detectMarkers(rgb_image)
-
-        if debug:
-            # draw results
-            debug_image = rgb_image.copy()
-            cv2.aruco.drawDetectedMarkers(debug_image, aruco_corners, aruco_ids)
-
-            # # Rejected
-            # cv2.aruco.drawDetectedMarkers(debug_image, aruco_rejected_image_points, None, (100, 0, 255))
-
-            # tag_transforms = []
+    
+    def solve(
+        camera_matrix, distortion_coefficients,
+        aruco_corners, aruco_ids,
+        left_handle_cb, right_handle_cb,
+        debug=False,
+        debug_image=None,
+        mitigate_projection_ambiguity=True,
+        err_diff_thres_start=0.1,
+        err_diff_thres_end=0.3,
+    ):
+        camera_matrix = np.array(camera_matrix, dtype=np.float32)
+        distortion_coefficients = np.array(distortion_coefficients, dtype=np.float32)
+        aruco_corners = np.array(aruco_corners, dtype=np.float32)
+        aruco_ids = np.array(aruco_ids)
 
         right_max_area = 0
         right_tag2cam_in_use = None
@@ -107,7 +113,8 @@ def process(
         left_tag2cam_in_use = None
 
         # Calculate pose for each marker
-        if aruco_ids is not None:
+        # not None or [[]] see: https://stackoverflow.com/questions/11295609/how-can-i-check-whether-a-numpy-array-is-empty-or-not
+        if aruco_ids.ndim and aruco_ids.size:
             for aruco_corner, aruco_id in zip(aruco_corners, aruco_ids):
                 aruco_id = aruco_id.item()
                 is_left_hand = aruco_id in left_hand_markers
@@ -215,6 +222,48 @@ def process(
                         rvec, tvec,
                         marker_length_mm * 1, 2
                     )
+    return solve
+
+def process(
+    device="/dev/video0", calibration_directory="./calibration_images", 
+    left_handle_cb=None, right_handle_cb=None,
+    debug=False,
+    mitigate_projection_ambiguity=True,
+    err_diff_thres_start=0.1,
+    err_diff_thres_end=0.3,
+):
+    # Open camera
+    cam = open_cam(device)
+
+    # Load calibration
+    camera_matrix, distortion_coefficients = calibration_load(calibration_directory)
+    
+    detect = get_detect()
+    solve = get_solve()
+
+    while True:
+        ret, rgb_image = cam.read()
+        
+        if debug:
+            # draw results
+            debug_image = rgb_image.copy()
+            
+        aruco_corners, aruco_ids = detect(
+            rgb_image,
+            debug,
+            debug_image,
+        )
+            
+        solve(
+            camera_matrix, distortion_coefficients,
+            aruco_corners, aruco_ids,
+            left_handle_cb, right_handle_cb,
+            debug,
+            debug_image,
+            mitigate_projection_ambiguity,
+            err_diff_thres_start,
+            err_diff_thres_end,
+        )
 
         if debug:
             # # visualize via matplotlib
