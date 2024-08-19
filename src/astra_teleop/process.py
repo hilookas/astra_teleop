@@ -95,7 +95,7 @@ def get_solve():
     def solve(
         camera_matrix, distortion_coefficients,
         aruco_corners, aruco_ids,
-        left_handle_cb, right_handle_cb,
+        left_hand_cb, right_hand_cb,
         debug=False,
         debug_image=None,
         mitigate_projection_ambiguity=True,
@@ -197,9 +197,9 @@ def get_solve():
                         right_tag2cam_in_use = tag2cam
             
             if right_tag2cam_in_use is not None:
-                if right_handle_cb is not None:
-                    # right_handle_cb(*right_tag2cam_in_use)
-                    right_handle_cb(right_tag2cam_in_use)
+                if right_hand_cb is not None:
+                    # right_hand_cb(*right_tag2cam_in_use)
+                    right_hand_cb(right_tag2cam_in_use)
 
                 if debug:
                     rvec, tvec = rvec_tvec_from_transform(right_tag2cam_in_use)
@@ -211,8 +211,8 @@ def get_solve():
                     )
 
             if left_tag2cam_in_use is not None:
-                if left_handle_cb is not None:
-                    left_handle_cb(left_tag2cam_in_use)
+                if left_hand_cb is not None:
+                    left_hand_cb(left_tag2cam_in_use)
 
                 if debug:
                     rvec, tvec = rvec_tvec_from_transform(left_tag2cam_in_use)
@@ -226,7 +226,7 @@ def get_solve():
 
 def process(
     device="/dev/video0", calibration_directory="./calibration_images", 
-    left_handle_cb=None, right_handle_cb=None,
+    left_hand_cb=None, right_hand_cb=None,
     debug=False,
     mitigate_projection_ambiguity=True,
     err_diff_thres_start=0.1,
@@ -257,7 +257,7 @@ def process(
         solve(
             camera_matrix, distortion_coefficients,
             aruco_corners, aruco_ids,
-            left_handle_cb, right_handle_cb,
+            left_hand_cb, right_hand_cb,
             debug,
             debug_image,
             mitigate_projection_ambiguity,
