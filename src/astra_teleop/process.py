@@ -63,11 +63,11 @@ def get_detect():
         return aruco_corners, aruco_ids
     return detect
 
-def get_solve():
+def get_solve(scale=1):
     # set coordinate system
     # Coordinate setting: 
     # https://stackoverflow.com/questions/53277597/fundamental-understanding-of-tvecs-rvecs-in-opencv-aruco
-    marker_length_mm = 0.056
+    marker_length_mm = 0.056 * scale
     obj_points = np.array([
         (-marker_length_mm / 2, marker_length_mm / 2, 0), # top left
         (marker_length_mm / 2, marker_length_mm / 2, 0), # top right
@@ -75,7 +75,7 @@ def get_solve():
         (-marker_length_mm / 2, -marker_length_mm / 2, 0), # bottom left
     ])
 
-    marker_z_to_center = -0.075/2
+    marker_z_to_center = -0.075/2 * scale
     marker_rotation_matrix = {
         # right gripper
         239: pr.matrix_from_euler([-math.pi/2, -math.pi/2, 0], 2, 1, 0, False), # original: right_bottom, now: front
