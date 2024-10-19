@@ -150,9 +150,11 @@ def get_solve(scale=1):
                     err_diff = reprojection_errors[1] - reprojection_errors[0]
                     if err_diff < err_diff_thres_start:
                         err_coff = [0.5, 0.5]
+                        print("ambiguity", err_coff)
                     elif err_diff < err_diff_thres_end:
                         membership = (err_diff - err_diff_thres_start) / (err_diff_thres_end - err_diff_thres_start)
                         err_coff = [0.5 + membership * 0.5, 0.5 - membership * 0.5]
+                        print("ambiguity", err_coff)
                     else:
                         err_coff = [1, 0]
                     if debug:
