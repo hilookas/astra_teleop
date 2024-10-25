@@ -42,6 +42,7 @@ def get_detect():
     aruco_detection_parameters = cv2.aruco.DetectorParameters()
     # aruco_detection_parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
     aruco_detection_parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_APRILTAG
+    aruco_detection_parameters.aprilTagQuadDecimate = 2
     # aruco_detection_parameters.cornerRefinementWinSize = 2
     detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_detection_parameters)
     
