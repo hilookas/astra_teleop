@@ -68,7 +68,7 @@ def get_solve(scale=1):
     # set coordinate system
     # Coordinate setting: 
     # https://stackoverflow.com/questions/53277597/fundamental-understanding-of-tvecs-rvecs-in-opencv-aruco
-    obj_points_map = {
+    obj_points_map = { # right part
         # top_left, top_right, bottom_right, bottom_left
         0:  [ (-15.00, -15.00,  48.28), (-15.00,  15.00,  48.28), ( 15.00,  15.00,  48.28), ( 15.00, -15.00,  48.28) ],
         
@@ -91,6 +91,8 @@ def get_solve(scale=1):
         15: [ (-44.75,  15.00, -23.54), (-44.75, -15.00, -23.54), (-23.54, -15.00, -44.75), (-23.54,  15.00, -44.75) ],
         16: [ ( 15.00,  44.75, -23.54), (-15.00,  44.75, -23.54), (-15.00,  23.54, -44.75), ( 15.00,  23.54, -44.75) ],
     }
+    for i in range(18 - 1): # left part
+        obj_points_map[i + 18] = obj_points_map[i]
     
     def solve(
         camera_matrix, distortion_coefficients,
@@ -107,8 +109,10 @@ def get_solve(scale=1):
             aruco_ids = np.array([])
             aruco_corners = np.array([])
             
-        left_tags = []
-        right_tags = []
+        tags = {
+            "left": [],
+            "right": [],
+        }
         
         for aruco_id, aruco_corner in zip(aruco_ids, aruco_corners):
             aruco_id = aruco_id.item()
@@ -116,46 +120,46 @@ def get_solve(scale=1):
             is_left_hand = aruco_id >= 18 # 18~34 is left hand
             
             if is_left_hand:
-                left_tags.append((aruco_id, aruco_corner))
+                tags["left"].append((aruco_id, aruco_corner))
             else:
-                right_tags.append((aruco_id, aruco_corner))
-                
-        right_tags.sort(key=lambda tag: cv2.contourArea(tag[1]), reverse=True)
-        if len(right_tags) < min_aruco_thres:
-            print(f"detected less than {min_aruco_thres} aruco tags")
-            return
-        right_tags = right_tags[:min_aruco_thres] # pick biggest four tag
-        # print(right_tags[0][0])
-        
-        obj_points = []
-        img_points = []
-        
-        for aruco_id, aruco_corner in right_tags:
-            if aruco_id in obj_points_map:
-                img_points.extend(aruco_corner)
-                obj_points.extend(obj_points_map[aruco_id])
+                tags["right"].append((aruco_id, aruco_corner))
 
-        # rvec shape (3, 1)
-        # tvec shape (3, 1)
-        unknown_variable, rvec, tvec = cv2.solvePnP(
-            np.array(obj_points), # shape: (4 * n, 3) # point coord in 3d space
-            np.array(img_points), # shape: (4 * n, 2) # point coord in camera 2d space
-            camera_matrix, distortion_coefficients
-        )
-        
-        tag2cam = transform_from_rvec_tvec(rvec.squeeze(), tvec.squeeze())
-        
-        right_tag2cam = None
-        left_tag2cam = None
+        tag2cam = {
+            "left": None,
+            "right": None,
+        }
+        for side in ["left", "right"]:
+            tags[side].sort(key=lambda tag: cv2.contourArea(tag[1]), reverse=True)
+            if len(tags[side]) < min_aruco_thres:
+                print(f"detected less than {min_aruco_thres} aruco tags")
+                continue
+            tags[side] = tags[side][:min_aruco_thres] # pick biggest four tag
+            # print(tags[side][0][0])
+            
+            obj_points = []
+            img_points = []
+            
+            for aruco_id, aruco_corner in tags[side]:
+                if aruco_id in obj_points_map:
+                    obj_points.extend(obj_points_map[aruco_id])
+                    img_points.extend(aruco_corner)
 
-        right_tag2cam = tag2cam
+            # rvec shape (3, 1)
+            # tvec shape (3, 1)
+            unknown_variable, rvec, tvec = cv2.solvePnP(
+                np.array(obj_points), # shape: (4 * n, 3) # point coord in 3d space
+                np.array(img_points), # shape: (4 * n, 2) # point coord in camera 2d space
+                camera_matrix, distortion_coefficients
+            )
+            
+            tag2cam[side] = transform_from_rvec_tvec(rvec.squeeze(), tvec.squeeze())
  
-        if right_tag2cam is not None:
+        if tag2cam["right"] is not None:
             if right_hand_cb is not None:
-                right_hand_cb(right_tag2cam)
+                right_hand_cb(tag2cam["right"])
 
             if debug:
-                rvec, tvec = rvec_tvec_from_transform(right_tag2cam)
+                rvec, tvec = rvec_tvec_from_transform(tag2cam["right"])
                 cv2.drawFrameAxes(
                     debug_image,
                     camera_matrix, distortion_coefficients,
@@ -163,12 +167,12 @@ def get_solve(scale=1):
                     50/2, 2
                 )
 
-        if left_tag2cam is not None:
+        if tag2cam["left"] is not None:
             if left_hand_cb is not None:
-                left_hand_cb(left_tag2cam)
+                left_hand_cb(tag2cam["left"])
 
             if debug:
-                rvec, tvec = rvec_tvec_from_transform(left_tag2cam)
+                rvec, tvec = rvec_tvec_from_transform(tag2cam["left"])
                 cv2.drawFrameAxes(
                     debug_image,
                     camera_matrix, distortion_coefficients,
