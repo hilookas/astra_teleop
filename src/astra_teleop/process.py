@@ -40,9 +40,9 @@ def rvec_tvec_from_transform(transform):
 def get_detect():
     aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
     aruco_detection_parameters = cv2.aruco.DetectorParameters()
-    # aruco_detection_parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
-    aruco_detection_parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_APRILTAG
-    aruco_detection_parameters.aprilTagQuadDecimate = 2
+    aruco_detection_parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX # ~30ms
+    # aruco_detection_parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_APRILTAG # Most accurate but also slowest with ~200-300ms
+    # aruco_detection_parameters.aprilTagQuadDecimate = 2
     # aruco_detection_parameters.cornerRefinementWinSize = 2
     detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_detection_parameters)
     
@@ -108,6 +108,8 @@ def get_solve(scale=1):
         if aruco_ids is None:
             aruco_ids = np.array([])
             aruco_corners = np.array([])
+        aruco_ids = np.array(aruco_ids)
+        aruco_corners = np.array(aruco_corners, dtype=np.float32)
             
         tags = {
             "left": [],
@@ -131,7 +133,7 @@ def get_solve(scale=1):
         for side in ["left", "right"]:
             tags[side].sort(key=lambda tag: cv2.contourArea(tag[1]), reverse=True)
             if len(tags[side]) < min_aruco_thres:
-                print(f"detected less than {min_aruco_thres} aruco tags")
+                # print(f"detected less than {min_aruco_thres} aruco tags")
                 continue
             tags[side] = tags[side][:min_aruco_thres] # pick biggest four tag
             # print(tags[side][0][0])
@@ -147,7 +149,7 @@ def get_solve(scale=1):
             # rvec shape (3, 1)
             # tvec shape (3, 1)
             unknown_variable, rvec, tvec = cv2.solvePnP(
-                np.array(obj_points), # shape: (4 * n, 3) # point coord in 3d space
+                np.array(obj_points) / 1000 * scale, # shape: (4 * n, 3) # point coord in 3d space
                 np.array(img_points), # shape: (4 * n, 2) # point coord in camera 2d space
                 camera_matrix, distortion_coefficients
             )
