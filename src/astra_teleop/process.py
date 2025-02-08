@@ -6,10 +6,10 @@ import yaml
 from yaml.loader import SafeLoader
 from pytransform3d import transformations as pt
 from pytransform3d import rotations as pr
-import math
 from .cam import open_cam
 import argparse
 from pprint import pprint
+import time
 
 def calibration_load(calibration_directory="./calibration_images"):
     file_names = glob.glob(str(Path(calibration_directory) / 'calibration_results_*.yaml'))
@@ -40,7 +40,7 @@ def rvec_tvec_from_transform(transform):
 def get_detect():
     aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
     aruco_detection_parameters = cv2.aruco.DetectorParameters()
-    aruco_detection_parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX # ~30ms
+    # aruco_detection_parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX # ~30ms
     # aruco_detection_parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_APRILTAG # Most accurate but also slowest with ~200-300ms
     # aruco_detection_parameters.aprilTagQuadDecimate = 2
     # aruco_detection_parameters.cornerRefinementWinSize = 2
@@ -97,7 +97,6 @@ def get_solve(scale=1):
     def solve(
         camera_matrix, distortion_coefficients,
         aruco_corners, aruco_ids,
-        left_hand_cb, right_hand_cb,
         debug=False,
         debug_image=None,
         min_aruco_thres=4
@@ -155,24 +154,8 @@ def get_solve(scale=1):
             )
             
             tag2cam[side] = transform_from_rvec_tvec(rvec.squeeze(), tvec.squeeze())
- 
-        if tag2cam["right"] is not None:
-            if right_hand_cb is not None:
-                right_hand_cb(tag2cam["right"])
-
-            if debug:
-                rvec, tvec = rvec_tvec_from_transform(tag2cam["right"])
-                cv2.drawFrameAxes(
-                    debug_image,
-                    camera_matrix, distortion_coefficients,
-                    rvec, tvec,
-                    50/2, 2
-                )
 
         if tag2cam["left"] is not None:
-            if left_hand_cb is not None:
-                left_hand_cb(tag2cam["left"])
-
             if debug:
                 rvec, tvec = rvec_tvec_from_transform(tag2cam["left"])
                 cv2.drawFrameAxes(
@@ -181,11 +164,22 @@ def get_solve(scale=1):
                     rvec, tvec,
                     50/2, 2
                 )
+ 
+        if tag2cam["right"] is not None:
+            if debug:
+                rvec, tvec = rvec_tvec_from_transform(tag2cam["right"])
+                cv2.drawFrameAxes(
+                    debug_image,
+                    camera_matrix, distortion_coefficients,
+                    rvec, tvec,
+                    50/2, 2
+                )
+                
+        return tag2cam["left"], tag2cam["right"]
     return solve
 
-def process(
+def get_process(
     device="/dev/video0", calibration_directory="./calibration_images", 
-    left_hand_cb=None, right_hand_cb=None,
     debug=False,
 ):
     # Open camera
@@ -197,26 +191,30 @@ def process(
     detect = get_detect()
     solve = get_solve()
 
-    while True:
+    def process():
         ret, rgb_image = cam.read()
-        
+
         if debug:
             # draw results
             debug_image = rgb_image.copy()
-            
+        else:
+            debug_image = None
+
+        t0 = time.perf_counter()
         aruco_corners, aruco_ids = detect(
             rgb_image,
             debug,
             debug_image,
-        )
-            
-        solve(
+        ) # 10ms@1080p
+        t1 = time.perf_counter()
+
+        tag2cam_left, tag2cam_right = solve(
             camera_matrix, distortion_coefficients,
             aruco_corners, aruco_ids,
-            left_hand_cb, right_hand_cb,
             debug,
             debug_image,
-        )
+        ) # 1ms@1080p
+        t2 = time.perf_counter()
 
         if debug:
             # # visualize via matplotlib
@@ -238,7 +236,15 @@ def process(
             # debug_image2 = cv2.undistort(debug_image, camera_matrix, distortion_coefficients)
             # cv2.imshow('Debug Image 2', debug_image2)
             if (cv2.waitKey(1) == 27): # Must wait, otherwise imshow will show black screen
-                break
+                raise Exception("Stop")
+        
+        print(f"detect time: {t1 - t0}")
+        print(f"solve time: {t2 - t1}")
+        print(f"total time: {t2 - t0}")
+        
+        return tag2cam_left, tag2cam_right
+        
+    return process
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -246,4 +252,8 @@ if __name__ == '__main__':
     parser.add_argument("-c", "--calibration_directory", help="Calibration directory.", default="./calibration_images")
     args = parser.parse_args()
 
-    process(args.device, args.calibration_directory, pprint, pprint, debug=True)
+    process = get_process(args.device, args.calibration_directory, debug=True)
+    while True:
+        tag2cam_left, tag2cam_right = process()
+        pprint(tag2cam_left)
+        pprint(tag2cam_right)
