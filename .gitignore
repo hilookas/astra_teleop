@@ -1,2 +1,4 @@
-calibration_images
+calibration_images*
 __pycache__
+experiment_results*
+old_plot
