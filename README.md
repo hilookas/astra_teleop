@@ -25,4 +25,6 @@ Special thanks to Hello Robot team and their stretch dex teleop project!
 
 ## License
 
-TODO 
+[MIT](http://opensource.org/licenses/MIT)
+
+Copyright (c) 2024 Haiqin Cui
