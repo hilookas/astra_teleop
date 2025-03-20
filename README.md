@@ -1,8 +1,14 @@
 # Dual Teleop for Astra Arm
 
-## Calibrate the intrinsic parameters of the camera 
+## Install
 
-TODO do better with the doc
+```bash
+git clone https://github.com/hilookas/astra_teleop.git
+cd astra_teleop
+pip install -e .
+```
+
+## Calibrate the intrinsic parameters of the camera 
 
 ```bash
 # collect calibration image
