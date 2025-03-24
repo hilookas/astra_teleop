@@ -1,5 +1,9 @@
 # Dual Teleop for Astra Arm
 
+See our tutorial on how to use this project:
+
+<https://aha-robot.notion.site/Teleoperation-Handle-Installation-and-Testing-1c033900bc8780008c97cf65191f4bf2>
+
 ## Install
 
 ```bash
