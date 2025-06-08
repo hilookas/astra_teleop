@@ -158,22 +158,22 @@ def get_solve(scale=1):
         if tag2cam["left"] is not None:
             if debug:
                 rvec, tvec = rvec_tvec_from_transform(tag2cam["left"])
-                cv2.drawFrameAxes(
-                    debug_image,
-                    camera_matrix, distortion_coefficients,
-                    rvec, tvec,
-                    50/2, 2
-                )
+                # cv2.drawFrameAxes(
+                #     debug_image,
+                #     camera_matrix, distortion_coefficients,
+                #     rvec, tvec,
+                #     50/2, 2
+                # )
  
         if tag2cam["right"] is not None:
             if debug:
                 rvec, tvec = rvec_tvec_from_transform(tag2cam["right"])
-                cv2.drawFrameAxes(
-                    debug_image,
-                    camera_matrix, distortion_coefficients,
-                    rvec, tvec,
-                    50/2, 2
-                )
+                # cv2.drawFrameAxes(
+                #     debug_image,
+                #     camera_matrix, distortion_coefficients,
+                #     rvec, tvec,
+                #     50/2, 2
+                # )
                 
         return tag2cam["left"], tag2cam["right"]
     return solve
@@ -252,8 +252,100 @@ if __name__ == '__main__':
     parser.add_argument("-c", "--calibration_directory", help="Calibration directory.", default="./calibration_images")
     args = parser.parse_args()
 
+    import open3d as o3d
+
+    # lookAt function implementation
+    # https://github.com/hilookas/Helper3D/blob/master/trimesh_render/src/camera.py
+    def lookAt(eye, target, up, yz_flip=False):
+        # Normalize the up vector
+        up /= np.linalg.norm(up)
+        forward = eye - target
+        forward /= np.linalg.norm(forward)
+        if np.dot(forward, up) == 1 or np.dot(forward, up) == -1:
+            up = np.array([0.0, 1.0, 0.0])
+        right = np.cross(up, forward)
+        right /= np.linalg.norm(right)
+        new_up = np.cross(forward, right)
+        new_up /= np.linalg.norm(new_up)
+
+        # Construct a rotation matrix from the right, new_up, and forward vectors
+        rotation = np.eye(4)
+        rotation[:3, :3] = np.row_stack((right, new_up, forward))
+
+        # Apply a translation to the camera position
+        translation = np.eye(4)
+        translation[:3, 3] = [
+            np.dot(right, eye),
+            np.dot(new_up, eye),
+            -np.dot(forward, eye),
+        ]
+
+        if yz_flip:
+            # This is for different camera setting, like Open3D
+            rotation[1, :] *= -1
+            rotation[2, :] *= -1
+            translation[1, 3] *= -1
+            translation[2, 3] *= -1
+
+        camera_pose = np.linalg.inv(np.matmul(translation, rotation))
+
+        return camera_pose
+
+    class PointCloudViewer:
+        def __init__(self):
+            self.origin = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
+            self.eef = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
+            self.eef_T_inv = np.eye(4)
+            self.eef_right = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
+            self.eef_right_T_inv = np.eye(4)
+
+            # Initialize the pointcloud viewer
+            self.vis = o3d.visualization.Visualizer()
+            self.vis.create_window(window_name="Point Cloud")
+
+            self.vis.add_geometry(self.origin)
+            self.vis.add_geometry(self.eef)
+            self.vis.add_geometry(self.eef_right)
+            
+            self.vis.get_render_option().point_size = 1
+            # self.vis.get_render_option().background_color = np.asarray([0, 0, 0])
+
+            view_control = self.vis.get_view_control()
+            view_control.set_constant_z_far(1000)
+
+            # Retrieve the camera parameters
+            camera_params = view_control.convert_to_pinhole_camera_parameters()
+            # Set the extrinsic parameters, yz_flip is for Open3D camera configuration
+            camera_pose = lookAt(eye=np.array([0., 0., -1.]), target=np.array([0. ,0., 0.]), up=np.array([0.0, -1.0, 0.0]), yz_flip=True)
+            camera_params.extrinsic = np.linalg.inv(camera_pose)
+            # Set the camera parameters
+            view_control.convert_from_pinhole_camera_parameters(camera_params)
+        
+        def update(self, Teef2cam, Teef2cam_right):
+            if Teef2cam is not None:
+                self.eef.transform(self.eef_T_inv)
+                self.eef.transform(Teef2cam)
+                self.eef_T_inv = pt.invert_transform(Teef2cam)
+                self.vis.update_geometry(self.eef)
+
+            if Teef2cam_right is not None:
+                self.eef_right.transform(self.eef_right_T_inv)
+                self.eef_right.transform(Teef2cam_right)
+                self.eef_right_T_inv = pt.invert_transform(Teef2cam_right)
+                self.vis.update_geometry(self.eef_right)
+
+            # Update the visualizer
+            self.vis.poll_events()
+            self.vis.update_renderer()
+        
+        def close(self):
+            self.vis.destroy_window()
+
+    viewer = PointCloudViewer()
+
     process = get_process(args.device, args.calibration_directory, debug=True)
     while True:
         tag2cam_left, tag2cam_right = process()
         pprint(tag2cam_left)
         pprint(tag2cam_right)
+        viewer.update(tag2cam_left, tag2cam_right)
