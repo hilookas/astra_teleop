@@ -30,13 +30,23 @@ aruco_board = cv2.aruco.CharucoBoard(
 # borderBits	width of the marker borders.
 ########
 
-image_size = (5100, 6600)
-margin_size = int(image_size[1]/20)
+import numpy as np
+from PIL import Image
+
+a4_res = 11.811 # px/mm # 300 ppi
+a4_res_ppi = 300 # px/inch # 300 ppi
+a4_size_mm = (297, 210) # mm
+a4_size = (int(a4_size_mm[0] * a4_res), int(a4_size_mm[1] * a4_res))
+
+# margin_size = 0
+margin_size1 = (210 - 0.04 * 5 * 1000) * a4_res / 2 # px
+margin_size2 = (297 - 0.04 * 7 * 1000) * a4_res / 2 # px
+margin_size = int(min(margin_size1, margin_size2))
 border_bits = 1
 
 aruco_board_image = aruco_board.generateImage(
-    outSize=image_size,
+    outSize=(a4_size[1], a4_size[0]),
     marginSize=margin_size,
     borderBits=border_bits)
 
-cv2.imwrite('calibration_board.png', aruco_board_image)
+Image.fromarray(aruco_board_image).save("calibration_board.pdf", "PDF", resolution=a4_res_ppi)

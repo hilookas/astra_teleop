@@ -2,3 +2,5 @@ calibration_images*
 __pycache__
 experiment_results*
 old_plot
+*.mp4
+.DS_Store
