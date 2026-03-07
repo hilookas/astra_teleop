@@ -20,8 +20,9 @@ dependencies = [
     "opencv-python >= 4.9.0",
     "pytransform3d",
     "pyyaml",
-    "matplotlib >= 3.9", # solve `A module that was compiled using NumPy 1.x cannot be run in` Error
-    "scipy >= 1.14", # solve `A module that was compiled using NumPy 1.x cannot be run in` Error
+    "matplotlib", # solve `A module that was compiled using NumPy 1.x cannot be run in` Error
+    "scipy",
+    "pyserial>=3.5",
 ]
 
 [project.urls]
