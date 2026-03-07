@@ -19,13 +19,6 @@ def load_exp_data(file_path: str):
     return timestamps, tag2cam_left, real_pos, cmd_pos
 
 
-def find_latest_exp_data(pattern: str = "exp_data_*.json") -> str:
-    candidates = glob.glob(pattern)
-    if not candidates:
-        raise FileNotFoundError(f"No file matched pattern: {pattern}")
-    return max(candidates, key=os.path.getmtime)
-
-
 def compute_translation_delta_norm(tag2cam_left: np.ndarray) -> np.ndarray:
     if tag2cam_left.ndim != 3 or tag2cam_left.shape[1:] != (4, 4):
         raise ValueError(
@@ -55,7 +48,7 @@ def main():
     )
     args = parser.parse_args()
 
-    file_path = args.file or find_latest_exp_data()
+    file_path = "exp_data_1772902628.json"
     timestamps, tag2cam_left, real_pos, cmd_pos = load_exp_data(file_path)
 
     if len(timestamps) == 0:
@@ -84,7 +77,7 @@ def main():
     fig.suptitle(os.path.basename(file_path))
     fig.tight_layout()
 
-    fig.savefig("resolution.pdf")
+    fig.savefig("resolution2.pdf")
     print(f"Saved figure to: resolution.pdf")
 
     plt.show()

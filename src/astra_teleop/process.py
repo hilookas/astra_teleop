@@ -41,7 +41,7 @@ def get_detect():
     aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
     aruco_detection_parameters = cv2.aruco.DetectorParameters()
     # aruco_detection_parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX # ~30ms
-    aruco_detection_parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_APRILTAG # Most accurate but also slowest with ~200-300ms
+    # aruco_detection_parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_APRILTAG # Most accurate but also slowest with ~200-300ms
     # aruco_detection_parameters.aprilTagQuadDecimate = 2
     # aruco_detection_parameters.cornerRefinementWinSize = 2
     detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_detection_parameters)
