@@ -48,7 +48,8 @@ def main():
     )
     args = parser.parse_args()
 
-    file_path = "exp_data_1772902628.json"
+    file_path = "exp_data_1772900974.json"
+    # file_path = "exp_data_1772902628.json"
     timestamps, tag2cam_left, real_pos, cmd_pos = load_exp_data(file_path)
 
     if len(timestamps) == 0:
@@ -57,28 +58,42 @@ def main():
     t = timestamps - timestamps[0]
     tag_delta_norm = compute_translation_delta_norm(tag2cam_left)
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+    plt.rcParams.update(
+        {
+            "font.size": 14,
+            "font.family": "sans-serif",
+            "font.sans-serif": ["Helvetica", "Arial", "PingFang SC"],
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+            "svg.fonttype": "none",
+            "axes.unicode_minus": False,
+        }
+    )
 
-    ax1.plot(t, real_pos, label="real_pos (gt)", linewidth=1.6)
-    ax1.plot(t, cmd_pos, label="cmd_pos", linewidth=1.2, alpha=0.9)
+    fig1, ax1 = plt.subplots(figsize=(8, 4))
+    ax1.plot(t, real_pos, label="Real Position (GT)", linewidth=1.6)
+    ax1.plot(t, cmd_pos, label="Commanded Position", linewidth=1.2, alpha=0.9)
     ax1.set_ylabel("Position (m)")
-    ax1.set_title("Lift Position")
-    ax1.grid(True, alpha=0.3)
+    ax1.set_xlabel("Time (s)")
+    # ax1.set_title("Lift Position")
+    ax1.spines["top"].set_visible(False)
+    ax1.spines["right"].set_visible(False)
     ax1.legend(loc="best")
+    fig1.tight_layout()
 
-    ax2.plot(t, tag_delta_norm, label="||tag_t - tag_t0||", linewidth=1.6)
-    ax2.plot(t, real_pos, label="real_pos (gt)", linewidth=1.2, alpha=0.9)
+    fig2, ax2 = plt.subplots(figsize=(8, 4))
+    ax2.plot(t, tag_delta_norm, label="Estimated Position", linewidth=1.6)
+    ax2.plot(t, real_pos, label="Real Position (GT)", linewidth=1.2, alpha=0.9)
     ax2.set_xlabel("Time (s)")
     ax2.set_ylabel("Displacement (m)")
-    ax2.set_title("Tag Translation Delta Norm vs GT")
-    ax2.grid(True, alpha=0.3)
+    # ax2.set_title("Tag Translation Delta Norm vs GT")
+    ax2.spines["top"].set_visible(False)
+    ax2.spines["right"].set_visible(False)
     ax2.legend(loc="best")
+    fig2.tight_layout()
 
-    fig.suptitle(os.path.basename(file_path))
-    fig.tight_layout()
-
-    fig.savefig("resolution2.pdf")
-    print(f"Saved figure to: resolution.pdf")
+    fig1.savefig("resolution_lift.pdf", bbox_inches="tight", pad_inches=0)
+    fig2.savefig("resolution_tag_vs_gt.pdf", bbox_inches="tight", pad_inches=0)
 
     plt.show()
 
