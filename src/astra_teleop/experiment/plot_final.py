@@ -23,46 +23,62 @@ import math
 import argparse
 
 if __name__ == "__main__":
-    vw_plate, x, y, theta, omega, phi, T, tag2cams, timestamps, rot_error, trans_error = torch.load(f"/home/ubuntu/astra_teleop_robicu/src/experiment_results_robocu_subpix_1080p_01/result.pt")
+    vw_plate, x, y, theta, omega, phi, T, tag2cams, timestamps, rot_error, trans_error = torch.load(f"/home/ubuntu/astra_teleop_robicu/src/experiment_results_robocu_subpix_1080p_01/result.pt", map_location="cpu")
 
     timestamps_robocu = timestamps.detach().cpu().numpy()
     rot_error_robocu = rot_error.detach().cpu().numpy()
     trans_error_robocu = trans_error.detach().cpu().numpy()
-    
-    vw_plate, x, y, theta, omega, phi, T, tag2cams, timestamps, rot_error, trans_error = torch.load(f"/home/ubuntu/astra_teleop_vanilla/src/experiment_results_vanilla_1080p_subpix/result.pt")
+
+    vw_plate, x, y, theta, omega, phi, T, tag2cams, timestamps, rot_error, trans_error = torch.load(f"/home/ubuntu/astra_teleop_vanilla/src/experiment_results_vanilla_1080p_subpix/result.pt", map_location="cpu")
 
     timestamps_vanilla = timestamps.detach().cpu().numpy()
     rot_error_vanilla = rot_error.detach().cpu().numpy()
     trans_error_vanilla = trans_error.detach().cpu().numpy()
 
+    plt.rcParams.update(
+        {
+            "font.size": 14,
+            "font.family": "sans-serif",
+            "font.sans-serif": ["Helvetica", "Arial", "PingFang SC"],
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+            "svg.fonttype": "none",
+            "axes.unicode_minus": False,
+        }
+    )
+
 
     # show two figures
-    fig1 = plt.figure()
+    fig1 = plt.figure(figsize=(8, 4))
     ax1 = fig1.add_subplot(111)
     ax1.plot(timestamps_vanilla, rot_error_vanilla / math.pi * 180, color="orange")
     ax1.plot(timestamps_robocu, rot_error_robocu / math.pi * 180, color="green")
     ax1.set_xlabel("Time (s)")
     ax1.set_ylabel("Rotation Error (deg)")
+    ax1.spines["top"].set_visible(False)
+    ax1.spines["right"].set_visible(False)
     ax1.set_ylim(-5, 105)
     # ax1.set_title("Rotation Error")
     ax1.legend(["6-Faced", "26-Faced (Proposed)", ], loc="upper right")
-    fig1.set_size_inches(fig1.get_size_inches() * 0.5)
-    fig1.savefig(f"rotation_error.jpg", bbox_inches="tight", pad_inches=0.1)
+    # fig1.set_size_inches(fig1.get_size_inches())
+    fig1.savefig(f"rotation_error_big.pdf", bbox_inches="tight", pad_inches=0)
 
-    fig2 = plt.figure()
+    fig2 = plt.figure(figsize=(8, 4))
     ax2 = fig2.add_subplot(111)
     ax2.plot(timestamps_vanilla, trans_error_vanilla * 1000, color="orange")
     ax2.plot(timestamps_robocu, trans_error_robocu * 1000, color="green")
     ax2.legend(["6-Faced", "26-Faced (Proposed)", ], loc="upper right")
     ax2.set_xlabel("Time (s)")
     ax2.set_ylabel("Translation Error (mm)")
+    ax2.spines["top"].set_visible(False)
+    ax2.spines["right"].set_visible(False)
     # ax2.set_title("Translation Error")
-    fig2.set_size_inches(fig2.get_size_inches() * 0.5)
-    fig2.savefig(f"translation_error.jpg", bbox_inches="tight", pad_inches=0.1)
-    
+    # fig2.set_size_inches(fig2.get_size_inches())
+    fig2.savefig(f"translation_error_big.pdf", bbox_inches="tight", pad_inches=0)
+
     print(f"RoboCu: rot {rot_error_robocu.mean() / math.pi * 180}deg, trans {trans_error_robocu.mean() * 1000}mm")
     print(f"Vanilla: rot {rot_error_vanilla.mean() / math.pi * 180}deg, trans {trans_error_vanilla.mean() * 1000}mm")
 
-# import torch; vw_plate, x, y, theta, omega, phi, T, tag2cams, timestamps, rot_error, trans_error = torch.load(f"result.pt"); 
+# import torch; vw_plate, x, y, theta, omega, phi, T, tag2cams, timestamps, rot_error, trans_error = torch.load(f"result.pt");
 # print(rot_error.mean())
 # print(trans_error.mean())
