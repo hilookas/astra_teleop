@@ -4,7 +4,7 @@ import argparse
 
 # Open camera
 def open_cam(device, image_height=1080, image_width=1920, frames_per_second=30):
-    cam = cv2.VideoCapture(device, cv2.CAP_V4L2)
+    cam = cv2.VideoCapture(0)
     cam.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
     fourcc_value = cv2.VideoWriter_fourcc(*'MJPG')
